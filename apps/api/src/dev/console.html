@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SocietyRecord · developer console</title>
+<style>
+  :root{
+    --ink:#22303F; --soft:#5A6875; --faint:#8894A0; --line:#DDE3E0;
+    --green:#1E5C46; --green-soft:#E7F0EC;
+    --marigold:#D98E04; --marigold-soft:#FBF1DC; --marigold-ink:#7A5203;
+    --red:#A94438; --red-soft:#F7E9E7;
+    --bg:#FAFBFA; --card:#fff;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Avenir Next","Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);
+       color:var(--ink);line-height:1.5;padding:28px 18px 70px}
+  .wrap{max-width:760px;margin:0 auto}
+  header{border-bottom:3px solid var(--green);padding-bottom:14px;margin-bottom:18px}
+  .eyebrow{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--green);font-weight:700}
+  h1{font-family:Georgia,serif;font-size:26px;margin-top:6px}
+  .warn{background:var(--marigold-soft);border-left:3px solid var(--marigold);color:var(--marigold-ink);
+        border-radius:8px;padding:10px 13px;font-size:12.5px;margin-top:13px}
+  h2{font-family:Georgia,serif;font-size:16px;margin:26px 0 9px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:12px}
+  label{display:block;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;
+        color:var(--faint);font-weight:700;margin-bottom:5px}
+  input,select{width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:8px;
+        font-size:15px;font-family:inherit;background:#fff;color:var(--ink)}
+  input:focus,select:focus{outline:2px solid var(--green);outline-offset:1px}
+  .row{display:flex;gap:9px;flex-wrap:wrap;align-items:flex-end;margin-bottom:11px}
+  .row>div{flex:1;min-width:150px}
+  button{background:var(--green);color:#fff;border:0;border-radius:8px;padding:10px 16px;
+        font-size:14px;font-weight:600;font-family:inherit;cursor:pointer;white-space:nowrap}
+  button:hover{filter:brightness(1.12)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button.ghost{background:#fff;color:var(--green);border:1.5px solid var(--green)}
+  button.danger{background:var(--red)}
+  .who{background:var(--green-soft);border-radius:9px;padding:13px 15px;margin-bottom:12px}
+  .who b{font-size:16px;display:block}
+  .who span{font-size:12.5px;color:var(--soft)}
+  .who .quote{font-size:12.5px;margin-top:6px;font-style:italic;color:var(--green)}
+  .group{border-bottom:1px solid var(--line);padding:9px 0;font-size:14px}
+  .group:last-child{border-bottom:0}
+  .group .lbl{font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--green)}
+  .person{display:flex;justify-content:space-between;align-items:center;gap:9px;padding:3px 0}
+  .person small{color:var(--soft);font-size:11.5px}
+  .person button{padding:4px 9px;font-size:11.5px}
+  pre{background:#1a221e;color:#d8e5de;border-radius:8px;padding:12px;overflow-x:auto;
+      font-family:var(--mono);font-size:11.5px;line-height:1.6;max-height:280px}
+  .chain{font-family:var(--mono);font-size:11.5px;color:var(--soft);word-break:break-all}
+  .msg{font-size:13px;padding:10px 13px;border-radius:8px;margin-bottom:11px}
+  .msg.ok{background:var(--green-soft);color:var(--green)}
+  .msg.err{background:var(--red-soft);color:var(--red)}
+  .hidden{display:none}
+  .hint{font-size:11.5px;color:var(--faint);margin-top:5px}
+  .codebox{font-family:var(--mono);font-size:22px;letter-spacing:.14em;text-align:center;
+           background:var(--marigold-soft);color:var(--marigold-ink);border-radius:8px;padding:9px;font-weight:700}
+  footer{margin-top:34px;padding-top:15px;border-top:1px solid var(--line);font-size:11.5px;color:var(--faint)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Developer console · not the product</div>
+  <h1>SocietyRecord API</h1>
+  <div class="warn">
+    <b>This is scaffolding, not the app.</b> The product is an Android app plus the public proof-page
+    renderer; neither exists yet. This page drives the real API so the week&nbsp;2 work — one-time-code
+    login, role-based home, people and roles, instant revocation — can be exercised by hand.
+    It reveals one-time codes, so it refuses to run in production.
+  </div>
+</header>
+
+<div id="msg" class="msg hidden"></div>
+
+<!-- ------------------------------------------------ sign in -->
+<section id="signin">
+  <h2>Sign in</h2>
+  <div class="card">
+    <div class="row">
+      <div>
+        <label for="phone">Phone number</label>
+        <select id="phone">
+          <option value="+919810000001">+91 98100 00001 — Vikram Mehta (treasurer)</option>
+          <option value="+919810000002">+91 98100 00002 — Sudha Menon (secretary)</option>
+          <option value="+919810000003">+91 98100 00003 — R. K. Bedekar (president)</option>
+          <option value="+919810000004">+91 98100 00004 — Santosh Yadav (staff)</option>
+          <option value="+919810000005">+91 98100 00005 — Prakash Joshi (accountant)</option>
+          <option value="+919999999999">+91 99999 99999 — nobody (unregistered)</option>
+        </select>
+      </div>
+      <button id="btnRequest">Send code</button>
+    </div>
+    <p class="hint">Real rate limits apply: three codes per number per fifteen minutes.</p>
+
+    <div id="codeStep" class="hidden">
+      <div class="codebox" id="codeShown">······</div>
+      <p class="hint">In production this arrives by SMS. Nothing reads it back from the database — codes
+        are stored hashed; this console keeps the last one in memory.</p>
+      <div class="row" style="margin-top:11px">
+        <div>
+          <label for="code">Enter the code</label>
+          <input id="code" inputmode="numeric" maxlength="6" placeholder="······">
+        </div>
+        <button id="btnVerify">Sign in</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ------------------------------------------------ signed in -->
+<section id="app" class="hidden">
+  <h2>Home</h2>
+  <div class="who" id="who"></div>
+  <div class="row">
+    <button class="ghost" id="btnSignOut">Sign out</button>
+    <button class="ghost" id="btnChain">Check the record's chain</button>
+  </div>
+  <div id="chain" class="card hidden"></div>
+
+  <h2>People</h2>
+  <div class="card" id="people"></div>
+
+  <h2>Add someone</h2>
+  <div class="card">
+    <div class="row">
+      <div>
+        <label for="newName">Name</label>
+        <input id="newName" placeholder="e.g. Ramesh Kumar">
+      </div>
+      <div>
+        <label for="newRole">Role</label>
+        <select id="newRole">
+          <option value="staff">Staff</option>
+          <option value="committee">Committee</option>
+          <option value="accountant">Accountant</option>
+          <option value="member">Member (no login)</option>
+        </select>
+      </div>
+      <button id="btnAdd">Add</button>
+    </div>
+    <p class="hint" id="roleHint"></p>
+  </div>
+
+  <h2>Last response</h2>
+  <pre id="out">—</pre>
+</section>
+
+<footer>
+  Reset to the seeded society at any time:
+  <button class="ghost" id="btnReset" style="padding:4px 10px;font-size:11.5px">Reset data</button>
+</footer>
+
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let session = null;
+
+const ROLE_SENTENCE = {
+  staff: "Can log and resolve complaints, and record cash expenses up to the society's limit. Cannot approve expenses or see member balances.",
+  committee: "Can approve expenses, manage dues, add people, and create every report.",
+  accountant: "Can see all financial records and download exports. Cannot create or approve anything.",
+  member: "Receives bills, receipts, and updates on their phone. Does not sign in.",
+};
+
+function say(text, kind = "ok") {
+  const el = $("msg");
+  el.textContent = text;
+  el.className = `msg ${kind}`;
+  el.classList.remove("hidden");
+}
+
+function show(data) {
+  $("out").textContent = JSON.stringify(data, null, 2);
+}
+
+async function api(path, options = {}) {
+  const headers = { "content-type": "application/json", ...(options.headers || {}) };
+  if (session?.accessToken) headers.authorization = `Bearer ${session.accessToken}`;
+  const res = await fetch(path, { ...options, headers });
+  const body = await res.json().catch(() => ({}));
+  show(body);
+  return { status: res.status, body };
+}
+
+$("btnRequest").onclick = async () => {
+  const phone = $("phone").value;
+  const { status, body } = await api("/auth/otp/request", {
+    method: "POST",
+    body: JSON.stringify({ phone }),
+  });
+
+  if (status === 429) return say(body.error, "err");
+  if (status >= 400) return say(body.error || "Could not send the code.", "err");
+
+  say(`Code sent to ${phone}. It expires in ${body.expiresInSeconds} seconds.`);
+  $("codeStep").classList.remove("hidden");
+
+  const peek = await fetch(`/dev/last-code?phone=${encodeURIComponent(phone)}`);
+  if (peek.ok) {
+    const { code } = await peek.json();
+    $("codeShown").textContent = code;
+    $("code").value = code;
+  }
+};
+
+$("btnVerify").onclick = async () => {
+  const phone = $("phone").value;
+  const { status, body } = await api("/auth/otp/verify", {
+    method: "POST",
+    body: JSON.stringify({ phone, code: $("code").value }),
+  });
+
+  if (status >= 400) return say(body.error || "That did not work.", "err");
+
+  if (body.status === "not_in_any_society") {
+    say(body.message, "err");
+    return;
+  }
+
+  if (body.status === "choose_society") {
+    say(`This number holds roles in ${body.societies.length} societies — the picker would appear here.`);
+    session = body.societies[0];
+    await loadHome();
+    return;
+  }
+
+  session = body;
+  say(`Signed in as ${body.you.name}.`);
+  await loadHome();
+};
+
+async function loadHome() {
+  $("signin").classList.add("hidden");
+  $("app").classList.remove("hidden");
+
+  const { status, body } = await api("/auth/me");
+  if (status !== 200) {
+    say("Session is not valid — signing out.", "err");
+    return signOut();
+  }
+
+  $("who").innerHTML = `
+    <b>${body.you.name}</b>
+    <span>${body.you.label}${session.you?.seat ? " · " + session.you.seat : ""} · ${body.society.name}</span>
+    <div class="quote">“${body.you.can}”</div>
+    <span>${body.permissions.length} permissions</span>`;
+
+  await loadPeople();
+}
+
+async function loadPeople() {
+  const { status, body } = await api("/people");
+  if (status === 401) return sessionExpired();
+  if (status === 403) {
+    $("people").innerHTML = `<p class="hint">This role may not see the people list — that is the policy layer refusing, server-side.</p>`;
+    return;
+  }
+
+  $("people").innerHTML = body.groups.map((g) => `
+    <div class="group">
+      <div class="lbl">${g.label} (${g.count})</div>
+      ${g.people.map((p) => `
+        <div class="person">
+          <span>${p.name}${p.seat ? ` <small>· ${p.seat}</small>` : ""}</span>
+          <button class="danger" data-revoke="${p.id}" data-name="${p.name}">Remove</button>
+        </div>`).join("")}
+    </div>`).join("");
+
+  document.querySelectorAll("[data-revoke]").forEach((btn) => {
+    btn.onclick = () => revoke(btn.dataset.revoke, btn.dataset.name);
+  });
+}
+
+async function revoke(personId, name) {
+  const { status, body } = await api(`/people/${personId}/revoke`, { method: "POST" });
+
+  if (status === 409) return say(body.error, "err");
+  if (status === 403) return say("This role may not remove people.", "err");
+  if (status === 401) return sessionExpired();
+  if (status >= 400) return say(body.error || "Could not remove that person.", "err");
+
+  say(`${name} removed. ${body.message}`);
+  await refreshAfterRoleChange();
+}
+
+$("btnAdd").onclick = async () => {
+  const name = $("newName").value.trim();
+  if (!name) return say("Enter a name first.", "err");
+
+  const { status, body } = await api("/people", {
+    method: "POST",
+    body: JSON.stringify({ name, role: $("newRole").value }),
+  });
+
+  if (status === 403) return say("This role may not add people.", "err");
+  if (status === 401) return sessionExpired();
+  if (status >= 400) return say(body.error || "Could not add that person.", "err");
+
+  say(`${name} added as ${body.role}.${body.needsInvite ? " They would receive an invite to send." : ""}`);
+  $("newName").value = "";
+  await refreshAfterRoleChange();
+};
+
+/**
+ * Any role change bumps the society's membership version, which invalidates
+ * every outstanding token — that is how revocation reaches every device. The
+ * real client re-authenticates silently; here we surface it, because watching it
+ * happen is the point of this console.
+ */
+async function refreshAfterRoleChange() {
+  const res = await fetch("/auth/refresh", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ refreshToken: session.refreshToken }),
+  });
+
+  if (!res.ok) return sessionExpired();
+  const { accessToken } = await res.json();
+  session.accessToken = accessToken;
+  await loadPeople();
+}
+
+function sessionExpired() {
+  say("Your session ended — roles changed, or your access was removed. This is the membership-version check.", "err");
+  signOut();
+}
+
+$("btnChain").onclick = async () => {
+  const societyId = (await api("/auth/me")).body.society.id;
+  const { body } = await api(`/societies/${societyId}/chain`);
+  $("chain").classList.remove("hidden");
+  $("chain").innerHTML = `
+    <label>Chain head · ${body.entries} entries</label>
+    <div class="chain">${body.chainHead}</div>
+    <p class="hint">Every entry carries the previous entry's hash. Alter any row and verification breaks
+      from that point forward — the nightly job reports it.</p>`;
+};
+
+$("btnSignOut").onclick = signOut;
+function signOut() {
+  session = null;
+  $("app").classList.add("hidden");
+  $("signin").classList.remove("hidden");
+  $("codeStep").classList.add("hidden");
+  $("code").value = "";
+}
+
+$("btnReset").onclick = async () => {
+  await fetch("/dev/reset", { method: "POST" });
+  signOut();
+  say("Data reset. Re-run the seed script to restore Harmony CGHS.");
+};
+
+$("newRole").onchange = () => { $("roleHint").textContent = ROLE_SENTENCE[$("newRole").value]; };
+$("newRole").onchange();
+</script>
+</body>
+</html>

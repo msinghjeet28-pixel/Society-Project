@@ -1,118 +1,108 @@
 # Render Blueprint — SocietyRecord
 #
-# REGION DECISION PENDING (see docs/DECISIONS.md, D-007).
-# The PRD's NFR says "hosted in India" and the architecture chose AWS Mumbai
-# for that reason. Render has no India region: Oregon, Ohio, Virginia,
-# Frankfurt, Singapore. `singapore` is set below as the closest option and is a
-# placeholder awaiting the PM's call — it is not a silent acceptance.
+# Declares only what exists. The public page renderer (week 4) and the worker
+# (week 5) are commented out at the bottom rather than declared early: a
+# blueprint that names an entrypoint which is not written yet fails the deploy
+# and tells you nothing useful.
 #
-# Deploy: connect this repo in the Render dashboard → Blueprints → New.
-
-previewsEnabled: true
+# To use this: Render Dashboard → Blueprints → New Blueprint Instance → pick this
+# repo. A service created by hand through "New → Web Service" IGNORES this file
+# entirely and uses Render's auto-detected Node commands, which do not work for a
+# pnpm workspace with no build step. See docs/RENDER.md.
+#
+# REGION: Render has no India region (Oregon, Ohio, Virginia, Frankfurt,
+# Singapore). The PRD promises "hosted in India". `singapore` below is the
+# closest option and a placeholder pending decision D-007 in docs/DECISIONS.md —
+# not a silent acceptance.
 
 databases:
   - name: societyrecord-db
     databaseName: societyrecord
     user: societyrecord_owner
     region: singapore
-    plan: basic-256mb # upgrade before pilot: point-in-time recovery needs a paid tier
+    # Free Postgres on Render expires 30 days after creation and has no
+    # point-in-time recovery. Fine for build and demo; move to a paid tier
+    # before a pilot society enters real money.
+    plan: free
     postgresMajorVersion: "16"
     ipAllowList: [] # only Render services may connect
 
 services:
-  # ---------------------------------------------------------------- API
   - type: web
     name: societyrecord-api
     runtime: node
     region: singapore
-    plan: starter
+    plan: free
     rootDir: .
-    # Type stripping runs unflagged on Node 22.18+; the flag stays for older
-    # local installs and is harmless where it is already default.
-    buildCommand: corepack enable && pnpm install --frozen-lockfile
-    preDeployCommand: pnpm db:migrate
+
+    # Render detects pnpm from pnpm-lock.yaml and honours the packageManager
+    # field in package.json. --frozen-lockfile makes a drifted lockfile a build
+    # failure rather than a silent resolution.
+    buildCommand: pnpm install --frozen-lockfile
+
+    # There is no build step: Node runs the TypeScript directly. Type stripping
+    # is unflagged from Node 22.18, and the flag is harmless where it is already
+    # the default.
     startCommand: node --experimental-strip-types apps/api/src/server.ts
+
     healthCheckPath: /health
     autoDeployTrigger: commit
+
     envVars:
       - key: NODE_VERSION
         value: "22.18.0"
+      - key: NODE_ENV
+        value: production
       - key: DATABASE_URL
         fromDatabase:
           name: societyrecord-db
           property: connectionString
+      # The free tier has no preDeployCommand, so the API applies migrations at
+      # boot under an advisory lock. On a paid plan, move this to preDeploy and
+      # set this to false.
+      - key: RUN_MIGRATIONS_ON_BOOT
+        value: "true"
       - key: LOG_LEVEL
         value: info
       - key: PG_POOL_MAX
-        value: "10"
-      # OTP provider. Must be DLT-registered for India (Arch §07) — the
-      # week-1 critical path item.
-      - key: SMS_PROVIDER_KEY
-        sync: false
+        value: "5" # free Postgres allows few connections; leave headroom
       - key: JWT_SIGNING_KEY
         generateValue: true
-
-  # ---------------------------------------------------------------- public pages
-  # Separate service, not a route inside the API: different security posture
-  # (unauthenticated), different performance budget (<3s on 3G), different
-  # scaling shape. An unauthenticated request never reaches ledger-write code.
-  - type: web
-    name: societyrecord-public
-    runtime: node
-    region: singapore
-    plan: starter
-    rootDir: .
-    buildCommand: corepack enable && pnpm install --frozen-lockfile
-    startCommand: node --experimental-strip-types apps/public/src/server.ts
-    healthCheckPath: /health
-    autoDeployTrigger: commit
-    envVars:
-      - key: NODE_VERSION
-        value: "22.18.0"
-      # Connects as public_ro: SELECT on public_* views only, so the renderer
-      # cannot read a balance or a phone number even if a template asks.
-      - key: DATABASE_URL
-        fromDatabase:
-          name: societyrecord-db
-          property: connectionString
-      - key: PUBLIC_BASE_URL
+      # OTP delivery. Until DLT registration clears, set OTP_CHANNEL=manual and
+      # read codes to the committee during assisted onboarding (Arch §07, §15).
+      - key: OTP_CHANNEL
+        value: manual
+      - key: SMS_PROVIDER_KEY
         sync: false
 
-  # ---------------------------------------------------------------- worker
-  - type: worker
-    name: societyrecord-worker
-    runtime: node
-    region: singapore
-    plan: starter
-    rootDir: .
-    buildCommand: corepack enable && pnpm install --frozen-lockfile
-    startCommand: node --experimental-strip-types apps/worker/src/main.ts
-    autoDeployTrigger: commit
-    envVars:
-      - key: NODE_VERSION
-        value: "22.18.0"
-      - key: DATABASE_URL
-        fromDatabase:
-          name: societyrecord-db
-          property: connectionString
+  # Nightly chain verification (Arch §15) — the guardrail that makes the hash
+  # chain more than a column nobody reads. Exits non-zero on the first broken
+  # link, which Render surfaces as a failed job.
+  #
+  # Cron jobs require a paid instance type on Render. Uncomment when the
+  # database moves off the free tier; until then run it by hand:
+  #   node --experimental-strip-types tools/verify-chains.ts
+  #
+  # - type: cron
+  #   name: societyrecord-chain-verify
+  #   runtime: node
+  #   region: singapore
+  #   plan: starter
+  #   rootDir: .
+  #   schedule: "30 20 * * *"   # 02:00 IST
+  #   buildCommand: pnpm install --frozen-lockfile
+  #   startCommand: node --experimental-strip-types tools/verify-chains.ts
+  #   envVars:
+  #     - key: NODE_VERSION
+  #       value: "22.18.0"
+  #     - key: DATABASE_URL
+  #       fromDatabase:
+  #         name: societyrecord-db
+  #         property: connectionString
 
-  # ---------------------------------------------------------------- nightly chain verification
-  # Arch §15: the guardrail that makes the hash chain more than decoration.
-  # Walks every society's chain and exits non-zero on the first broken link,
-  # which Render surfaces as a failed job.
-  - type: cron
-    name: societyrecord-chain-verify
-    runtime: node
-    region: singapore
-    plan: starter
-    rootDir: .
-    schedule: "30 20 * * *" # 02:00 IST
-    buildCommand: corepack enable && pnpm install --frozen-lockfile
-    startCommand: node --experimental-strip-types tools/verify-chains.ts
-    envVars:
-      - key: NODE_VERSION
-        value: "22.18.0"
-      - key: DATABASE_URL
-        fromDatabase:
-          name: societyrecord-db
-          property: connectionString
+  # Public proof-page renderer — week 4. A separate service on purpose:
+  # unauthenticated, CDN-cacheable, and connected as public_ro so it cannot read
+  # a balance or a phone number (Arch §08). Declared when the entrypoint exists.
+
+  # Worker (receipt/summary rendering, XLSX export, ratification watcher) —
+  # week 5, same reason.

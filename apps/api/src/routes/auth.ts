@@ -4,6 +4,7 @@ import { z } from "zod";
 import { inTransaction, pool } from "../db.ts";
 import { issueChallenge, OtpError, recentFailures, verifyChallenge } from "../auth/otp.ts";
 import { otpMessage, senderFromEnv } from "../auth/sms.ts";
+import { isDevConsoleEnabled, recordCode } from "../dev/console.ts";
 import {
   hashRefreshToken, newRefreshToken, REFRESH_TOKEN_TTL_MS, signAccessToken,
 } from "../auth/token.ts";
@@ -68,6 +69,10 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         // roll back a challenge the user may already have received.
         const language = "en"; // society language is not known until we know the society
         await sender.send(phone, otpMessage(issued.code, language));
+
+        // Dev console only: codes are stored hashed and cannot be read back, so
+        // the console needs the plaintext held in memory for this process.
+        if (isDevConsoleEnabled()) recordCode(phone, issued.code);
 
         return {
           sent: true,

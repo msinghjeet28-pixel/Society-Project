@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { actorPlugin } from "./plugins/actor.ts";
 import { policyPlugin } from "./plugins/policy.ts";
+import { devConsolePlugin, isDevConsoleEnabled } from "./dev/console.ts";
 import { authRoutes } from "./routes/auth.ts";
 import { peopleRoutes } from "./routes/people.ts";
 import { pool } from "./db.ts";
@@ -34,6 +35,13 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   await app.register(authRoutes);
   await app.register(peopleRoutes);
+
+  // Scaffolding for driving the API by hand. Guarded twice — an explicit env
+  // flag, and a hard refusal under NODE_ENV=production — because a console that
+  // reveals one-time codes is an authentication bypass.
+  if (isDevConsoleEnabled()) {
+    await app.register(devConsolePlugin);
+  }
 
   return app;
 }

@@ -19,9 +19,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # No version pinned here on purpose: packageManager in package.json is the
+      # single source of truth. Specifying both is an error, not a belt-and-braces.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: "22.18.0"
@@ -57,9 +57,9 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/societyrecord_test
     steps:
       - uses: actions/checkout@v4
+      # No version pinned here on purpose: packageManager in package.json is the
+      # single source of truth. Specifying both is an error, not a belt-and-braces.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: "22.18.0"

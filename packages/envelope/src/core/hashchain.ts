@@ -69,36 +69,86 @@ export type ChainVerdict =
   | { ok: false; brokenAt: string; reason: string; position: number };
 
 /**
- * Walk a society's chain in recorded order. Returns the first break, which is
- * the row to investigate — everything after it is suspect by construction.
+ * Verify a society's chain.
+ *
+ * The links are followed by their own hashes, starting from the genesis link,
+ * and the order they arrive in is irrelevant. That matters: an earlier version
+ * of this function trusted `ORDER BY recorded_at` to reproduce the chain's
+ * order, which is only true while no two entries share a millisecond. Under a
+ * connection pool they routinely do, and the function then reported a break in a
+ * perfectly sound chain — a false alarm on the one claim the product is sold on.
+ * A chain that has to be told its own order is not being verified.
  */
 export function verifyChain(links: readonly ChainLink[]): ChainVerdict {
-  let expectedPrev = GENESIS_HASH;
+  if (links.length === 0) return { ok: true, length: 0 };
 
-  for (let i = 0; i < links.length; i++) {
-    const link = links[i]!;
-
-    if (link.prevHash !== expectedPrev) {
-      return {
-        ok: false,
-        brokenAt: link.id,
-        position: i,
-        reason: `prev_hash mismatch: chain expected ${expectedPrev.slice(0, 12)}…, row claims ${link.prevHash.slice(0, 12)}…`,
-      };
-    }
-
-    const recomputed = hashEntry(link.entry, link.prevHash);
-    if (recomputed !== link.entryHash) {
-      return {
-        ok: false,
-        brokenAt: link.id,
-        position: i,
-        reason: `content altered: stored hash ${link.entryHash.slice(0, 12)}… does not match recomputed ${recomputed.slice(0, 12)}…`,
-      };
-    }
-
-    expectedPrev = link.entryHash;
+  const byPrevHash = new Map<string, ChainLink[]>();
+  for (const link of links) {
+    const siblings = byPrevHash.get(link.prevHash);
+    if (siblings) siblings.push(link);
+    else byPrevHash.set(link.prevHash, [link]);
   }
 
-  return { ok: true, length: links.length };
+  // A fork: two entries claiming the same parent. This is what an append without
+  // the per-society lock produces, and it is invisible to a sequential scan.
+  for (const [prevHash, siblings] of byPrevHash) {
+    if (siblings.length > 1) {
+      return {
+        ok: false,
+        brokenAt: siblings[1]!.id,
+        position: -1,
+        reason:
+          `chain forked: ${siblings.length} entries claim the same parent ` +
+          `${prevHash.slice(0, 12)}… (${siblings.map((s) => s.id).join(", ")})`,
+      };
+    }
+  }
+
+  let expectedPrev = GENESIS_HASH;
+  let position = 0;
+  const walked = new Set<string>();
+
+  for (;;) {
+    const next = byPrevHash.get(expectedPrev)?.[0];
+    if (!next) break;
+
+    if (walked.has(next.id)) {
+      return {
+        ok: false,
+        brokenAt: next.id,
+        position,
+        reason: "chain loops back on itself",
+      };
+    }
+    walked.add(next.id);
+
+    const recomputed = hashEntry(next.entry, next.prevHash);
+    if (recomputed !== next.entryHash) {
+      return {
+        ok: false,
+        brokenAt: next.id,
+        position,
+        reason: `content altered: stored hash ${next.entryHash.slice(0, 12)}… does not match recomputed ${recomputed.slice(0, 12)}…`,
+      };
+    }
+
+    expectedPrev = next.entryHash;
+    position++;
+  }
+
+  if (walked.size !== links.length) {
+    // Everything reachable from genesis verified, but entries remain. Something
+    // between them and the chain head is gone.
+    const orphan = links.find((l) => !walked.has(l.id))!;
+    return {
+      ok: false,
+      brokenAt: orphan.id,
+      position: walked.size,
+      reason:
+        `entry is not reachable from the genesis link — an entry between it and ` +
+        `the chain head is missing (${links.length - walked.size} unreachable of ${links.length})`,
+    };
+  }
+
+  return { ok: true, length: walked.size };
 }

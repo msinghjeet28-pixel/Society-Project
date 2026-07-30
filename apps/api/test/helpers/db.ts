@@ -27,16 +27,54 @@ export function ownerClient(): pg.Client {
   return new pg.Client({ connectionString: TEST_DATABASE_URL, ssl: isLocal ? false : { rejectUnauthorized: false } });
 }
 
+/**
+ * A bounded pool for tests that fan out.
+ *
+ * Deliberately small. An earlier version of the counter test opened a fresh
+ * connection per concurrent issuance — 100 of them — and CI answered "sorry, too
+ * many clients already" while local squeaked under the limit by luck. Bounding
+ * the pool is both more robust and more faithful: production runs with
+ * PG_POOL_MAX of 5 on Render's free tier, so contention on the counter row is
+ * what the test should reproduce, not socket exhaustion.
+ *
+ * Lazily created and recreated after close: every test file runs in one process
+ * (see vitest.config.ts), so a pool ended by the first file's teardown would
+ * leave every later file without connections.
+ */
+let appPool: pg.Pool | null = null;
+
+function pool(): pg.Pool {
+  appPool ??= new pg.Pool({
+    connectionString: TEST_DATABASE_URL,
+    ssl: isLocal ? false : { rejectUnauthorized: false },
+    max: 12,
+    application_name: "sr-test-app-role",
+  });
+  return appPool;
+}
+
 /** A connection with the API's real privileges, so tests attack what ships. */
-export async function withAppRole<T>(fn: (c: pg.Client) => Promise<T>): Promise<T> {
-  const c = ownerClient();
-  await c.connect();
+export async function withAppRole<T>(fn: (c: pg.PoolClient) => Promise<T>): Promise<T> {
+  const c = await pool().connect();
   try {
     await c.query("SET ROLE app_rw");
     return await fn(c);
   } finally {
-    await c.end();
+    // SET ROLE outlives the transaction and rides the connection back into the
+    // pool. Without this, an unrelated later test silently runs as app_rw and
+    // fails somewhere far from the cause.
+    try {
+      await c.query("RESET ROLE");
+    } finally {
+      c.release();
+    }
   }
+}
+
+export async function closeTestPool(): Promise<void> {
+  const existing = appPool;
+  appPool = null;
+  await existing?.end();
 }
 
 const LEDGER_TABLES = ["membership_event"] as const;

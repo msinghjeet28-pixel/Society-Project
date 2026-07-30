@@ -10,7 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { randomUUID } from "node:crypto";
 import { hashEntry, verifyChain, type ChainLink } from "@sr/envelope/core";
-import { ownerClient, resetWorld, seedPerson, seedSociety, withAppRole } from "./helpers/db.ts";
+import { closeTestPool, ownerClient, resetWorld, seedPerson, seedSociety, withAppRole } from "./helpers/db.ts";
 
 // app_rw is NOLOGIN; SET ROLE carries the same privilege restrictions as
 // connecting as that role, so these tests attack what actually ships.
@@ -20,7 +20,10 @@ const asAppRole = withAppRole;
 
 /** Append a membership event through the chain lock, as the app would. */
 async function append(
-  client: pg.Client,
+  // Anything that can issue SQL: a pooled client from withAppRole, or a plain
+  // one. Narrowing this to pg.Client is what broke when app-role connections
+  // moved to a pool.
+  client: Pick<pg.PoolClient, "query">,
   opts: { societyId: string; personId: string; kind: "granted" | "revoked" },
 ): Promise<string> {
   const id = randomUUID();
@@ -73,6 +76,7 @@ afterAll(async () => {
   // work, never at the end: a teardown that truncates shared tables can clobber
   // another file's fixtures, which is exactly how CI went red while local passed.
   await owner.end();
+  await closeTestPool();
 });
 
 describe("layer 2 · database privileges", () => {

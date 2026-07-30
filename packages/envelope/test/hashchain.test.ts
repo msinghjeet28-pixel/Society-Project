@@ -83,3 +83,47 @@ describe("verification", () => {
     expect(() => hashEntry(base, "not-a-hash")).toThrow(/64 lowercase hex/);
   });
 });
+
+describe("order independence (regression)", () => {
+  it("verifies a chain presented in any order", () => {
+    // The reason this matters: an earlier implementation trusted
+    // `ORDER BY recorded_at` to reproduce chain order. Two entries in the same
+    // millisecond — routine under a connection pool — made it report a break in
+    // a sound chain, which is a false alarm on the product's central claim.
+    const links = chainOf([
+      base,
+      { ...base, id: "b", content: "amount=80000" },
+      { ...base, id: "c", content: "amount=120000" },
+      { ...base, id: "d", content: "amount=45000" },
+    ]);
+
+    for (const order of [
+      [3, 2, 1, 0],
+      [1, 3, 0, 2],
+      [2, 0, 3, 1],
+    ]) {
+      const shuffled = order.map((i) => links[i]!);
+      expect(verifyChain(shuffled), `order ${order.join("")}`).toEqual({ ok: true, length: 4 });
+    }
+  });
+
+  it("still catches a fork when the forked pair arrives out of order", () => {
+    const links = chainOf([base, { ...base, id: "b" }]);
+    const forked = [{ ...links[1]!, id: "c" }, links[0]!, links[1]!];
+
+    const verdict = verifyChain(forked);
+    expect(verdict.ok).toBe(false);
+    if (!verdict.ok) expect(verdict.reason).toMatch(/forked/);
+  });
+
+  it("names an unreachable entry rather than passing silently", () => {
+    const links = chainOf([base, { ...base, id: "b" }, { ...base, id: "c" }]);
+    const verdict = verifyChain([links[0]!, links[2]!]);
+
+    expect(verdict.ok).toBe(false);
+    if (!verdict.ok) {
+      expect(verdict.brokenAt).toBe("c");
+      expect(verdict.reason).toMatch(/not reachable/);
+    }
+  });
+});

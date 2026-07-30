@@ -45,9 +45,13 @@ for (const society of societies) {
     continue;
   }
 
-  // The stored head must match the last computed hash, or something wrote a
-  // row without advancing the chain.
-  const expectedHead = links.at(-1)?.entryHash ?? "0".repeat(64);
+  // The stored head must be the tip of the walked chain: the one entry_hash
+  // that no other entry claims as its parent. Taking "the last row by
+  // recorded_at" would reintroduce the timestamp assumption verifyChain was
+  // just freed from.
+  const claimedParents = new Set(links.map((l) => l.prevHash));
+  const tip = links.find((l) => !claimedParents.has(l.entryHash));
+  const expectedHead = tip?.entryHash ?? "0".repeat(64);
   if (expectedHead !== society.chain_head) {
     broken++;
     console.error(
@@ -71,7 +75,12 @@ if (broken > 0) {
 console.log(`\nall ${societies.length} societ${societies.length === 1 ? "y" : "ies"} verified`);
 
 /**
- * Loads every ledger entry for a society in chain order.
+ * Loads every ledger entry for a society.
+ *
+ * Order does not matter: verifyChain follows the links themselves. The ORDER BY
+ * below only keeps output stable between runs. Relying on it for correctness is
+ * what made an earlier version of this job cry wolf whenever two entries landed
+ * in the same millisecond.
  *
  * As ledger tables are added (expense, payment, complaint_event), each needs a
  * branch here. The shared envelope is what keeps that a UNION rather than a

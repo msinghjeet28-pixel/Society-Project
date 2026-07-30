@@ -9,7 +9,7 @@
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import type pg from "pg";
 import { randomUUID } from "node:crypto";
-import { ownerClient, resetWorld, seedSociety, withAppRole } from "./helpers/db.ts";
+import { closeTestPool, ownerClient, resetWorld, seedSociety, withAppRole } from "./helpers/db.ts";
 
 let owner: pg.Client;
 let societyId: string;
@@ -29,6 +29,7 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await owner.end();
+  await closeTestPool();
 });
 
 /** Issue a number; `abort` rolls back, which must roll the number back too. */

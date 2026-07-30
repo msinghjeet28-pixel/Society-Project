@@ -10,7 +10,7 @@ import type pg from "pg";
 import {
   CODE_TTL_MS, MAX_ATTEMPTS, PHONE_LIMIT, generateCode, issueChallenge, verifyChallenge,
 } from "../src/auth/otp.ts";
-import { ownerClient, resetWorld } from "./helpers/db.ts";
+import { ownerClient } from "./helpers/db.ts";
 
 process.env["JWT_SIGNING_KEY"] ??= "test-signing-key-at-least-32-characters-long";
 

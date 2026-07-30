@@ -17,6 +17,20 @@ import pg from "pg";
 export const TEST_DATABASE_URL = (() => {
   const url = process.env["DATABASE_URL"];
   if (!url) throw new Error("DATABASE_URL is not set — integration tests need a real Postgres");
+
+  // These tests TRUNCATE every table on the way in. Pointed at a development
+  // database that is exactly what they do, and the seeded society disappears
+  // mid-session with no error to explain it — which is how this guard came to
+  // exist. The name must say out loud that the data is disposable.
+  const name = url.split("/").pop()?.split("?")[0] ?? "";
+  if (!/_test$/.test(name)) {
+    throw new Error(
+      `refusing to run against database "${name}" — the suite truncates every table.\n` +
+        `Point DATABASE_URL at a database whose name ends in _test:\n\n` +
+        `  createdb societyrecord_test\n` +
+        `  DATABASE_URL="postgresql://$(whoami)@localhost:5432/societyrecord_test" pnpm test\n`,
+    );
+  }
   return url;
 })();
 

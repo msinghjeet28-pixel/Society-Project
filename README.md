@@ -22,15 +22,39 @@ PostgreSQL 16.
 
 ```bash
 corepack enable && pnpm install
-
-# Postgres
 brew services start postgresql@16
-createdb societyrecord_dev
-export DATABASE_URL="postgresql://$(whoami)@localhost:5432/societyrecord_dev"
 
-pnpm db:migrate
+# Two databases. The suite TRUNCATEs every table on the way in, so it refuses to
+# run against anything not named *_test — a guard that exists because it once
+# wiped a seeded dev database mid-session with no error to explain it.
+createdb societyrecord_dev
+createdb societyrecord_test
+
+export DATABASE_URL="postgresql://$(whoami)@localhost:5432/societyrecord_dev"
+export TEST_DATABASE_URL="postgresql://$(whoami)@localhost:5432/societyrecord_test"
+export JWT_SIGNING_KEY="any-string-of-at-least-32-characters"
+
+pnpm db:migrate           # dev
+pnpm db:migrate:test      # test
+node --experimental-strip-types tools/seed-dev.ts   # Harmony CGHS + the personas
+
 pnpm --filter @sr/api dev      # http://localhost:3000/health
 ```
+
+### Poking at it by hand
+
+There are no product screens yet — the Android app and the public proof-page
+renderer arrive weeks 4–5. In the meantime a developer console drives the real
+API:
+
+```bash
+DEV_CONSOLE=on pnpm --filter @sr/api dev
+```
+
+Then open <http://localhost:3000/dev>: request a one-time code, sign in as any
+of the seeded personas, see the role-based home, add and remove people, and
+watch a session die the moment roles change. It reveals codes, so it refuses to
+register when `NODE_ENV=production`.
 
 ## The gates
 

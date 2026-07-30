@@ -1,0 +1,84 @@
+# The gate stack from Tech Design §09, in the order a PR meets it.
+#
+# A gate that is not enforced here is an intention, not a guardrail. Branch
+# protection requires this workflow, including for the tech lead.
+name: gates
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: gates-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    name: "1–2 · types, lint, boundaries"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.18.0"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Gate 1 — strict types, and the money lint that keeps rupees off floats.
+      - name: typecheck
+        run: pnpm -r typecheck
+      - name: lint
+        run: pnpm lint
+
+      # Gate 2 — module boundaries; also catches server code reaching the app.
+      - name: dependency boundaries
+        run: pnpm depcruise
+
+  integration:
+    name: "3–8 · ledger, policy, counters"
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: societyrecord_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/societyrecord_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.18.0"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Gate 3 — migrations apply cleanly from empty, every time.
+      - name: migrate
+        run: pnpm db:migrate
+
+      # Gate 3b — no migration may make a ledger table mutable.
+      - name: migration linter
+        run: node --experimental-strip-types tools/lint-migrations.ts
+
+      # Gates 4–8 — the evidence tests: immutability (all four layers plus the
+      # concurrency fork), policy deny-by-default, gapless counters.
+      - name: evidence tests
+        run: pnpm vitest run
+
+      # The guardrail itself must work on a real database.
+      - name: chain verification job
+        run: node --experimental-strip-types tools/verify-chains.ts

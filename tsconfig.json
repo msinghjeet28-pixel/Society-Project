@@ -1,0 +1,8 @@
+{
+  "//": "Covers root-level tooling files so the linter's project service can see them. Workspace code is checked by each package's own tsconfig.",
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["tools/**/*.ts", "vitest.config.ts"]
+}

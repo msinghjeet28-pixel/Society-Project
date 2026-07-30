@@ -1,0 +1,118 @@
+# Render Blueprint — SocietyRecord
+#
+# REGION DECISION PENDING (see docs/DECISIONS.md, D-007).
+# The PRD's NFR says "hosted in India" and the architecture chose AWS Mumbai
+# for that reason. Render has no India region: Oregon, Ohio, Virginia,
+# Frankfurt, Singapore. `singapore` is set below as the closest option and is a
+# placeholder awaiting the PM's call — it is not a silent acceptance.
+#
+# Deploy: connect this repo in the Render dashboard → Blueprints → New.
+
+previewsEnabled: true
+
+databases:
+  - name: societyrecord-db
+    databaseName: societyrecord
+    user: societyrecord_owner
+    region: singapore
+    plan: basic-256mb # upgrade before pilot: point-in-time recovery needs a paid tier
+    postgresMajorVersion: "16"
+    ipAllowList: [] # only Render services may connect
+
+services:
+  # ---------------------------------------------------------------- API
+  - type: web
+    name: societyrecord-api
+    runtime: node
+    region: singapore
+    plan: starter
+    rootDir: .
+    # Type stripping runs unflagged on Node 22.18+; the flag stays for older
+    # local installs and is harmless where it is already default.
+    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    preDeployCommand: pnpm db:migrate
+    startCommand: node --experimental-strip-types apps/api/src/server.ts
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_VERSION
+        value: "22.18.0"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: societyrecord-db
+          property: connectionString
+      - key: LOG_LEVEL
+        value: info
+      - key: PG_POOL_MAX
+        value: "10"
+      # OTP provider. Must be DLT-registered for India (Arch §07) — the
+      # week-1 critical path item.
+      - key: SMS_PROVIDER_KEY
+        sync: false
+      - key: JWT_SIGNING_KEY
+        generateValue: true
+
+  # ---------------------------------------------------------------- public pages
+  # Separate service, not a route inside the API: different security posture
+  # (unauthenticated), different performance budget (<3s on 3G), different
+  # scaling shape. An unauthenticated request never reaches ledger-write code.
+  - type: web
+    name: societyrecord-public
+    runtime: node
+    region: singapore
+    plan: starter
+    rootDir: .
+    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    startCommand: node --experimental-strip-types apps/public/src/server.ts
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_VERSION
+        value: "22.18.0"
+      # Connects as public_ro: SELECT on public_* views only, so the renderer
+      # cannot read a balance or a phone number even if a template asks.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: societyrecord-db
+          property: connectionString
+      - key: PUBLIC_BASE_URL
+        sync: false
+
+  # ---------------------------------------------------------------- worker
+  - type: worker
+    name: societyrecord-worker
+    runtime: node
+    region: singapore
+    plan: starter
+    rootDir: .
+    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    startCommand: node --experimental-strip-types apps/worker/src/main.ts
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_VERSION
+        value: "22.18.0"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: societyrecord-db
+          property: connectionString
+
+  # ---------------------------------------------------------------- nightly chain verification
+  # Arch §15: the guardrail that makes the hash chain more than decoration.
+  # Walks every society's chain and exits non-zero on the first broken link,
+  # which Render surfaces as a failed job.
+  - type: cron
+    name: societyrecord-chain-verify
+    runtime: node
+    region: singapore
+    plan: starter
+    rootDir: .
+    schedule: "30 20 * * *" # 02:00 IST
+    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    startCommand: node --experimental-strip-types tools/verify-chains.ts
+    envVars:
+      - key: NODE_VERSION
+        value: "22.18.0"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: societyrecord-db
+          property: connectionString

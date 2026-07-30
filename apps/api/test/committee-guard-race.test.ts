@@ -40,7 +40,6 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await resetWorld(owner);
   await owner.end();
   await closePool();
 });

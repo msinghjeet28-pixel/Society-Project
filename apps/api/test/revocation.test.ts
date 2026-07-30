@@ -41,7 +41,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await resetWorld(owner);
+  // No reset — see the note in ledger-immutability.test.ts.
   await owner.end();
   await app.close();
   await closePool();

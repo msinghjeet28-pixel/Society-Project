@@ -69,9 +69,9 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // No row-level cleanup: the trigger refuses DELETE, by design. TRUNCATE is
-  // the only honest reset, and it belongs to tests, not to production.
-  await resetWorld(owner);
+  // Deliberately no reset here. Fixtures are wiped at the START of a file's
+  // work, never at the end: a teardown that truncates shared tables can clobber
+  // another file's fixtures, which is exactly how CI went red while local passed.
   await owner.end();
 });
 

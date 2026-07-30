@@ -26,6 +26,14 @@ pg.types.setTypeParser(pg.types.builtins.INT8, (v) => v);
 
 export type Tx = pg.PoolClient;
 
+/**
+ * Anything that can run a query — a pool client inside a transaction, or a
+ * plain client. Functions that only issue SQL should take this rather than
+ * PoolClient: it makes them usable from tests and one-off tools without
+ * pretending they manage a connection's lifecycle.
+ */
+export type Queryable = Pick<pg.PoolClient, "query">;
+
 /** Run a function in a transaction, rolling back on any throw. */
 export async function inTransaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
   const client = await pool.connect();

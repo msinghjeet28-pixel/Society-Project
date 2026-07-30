@@ -8,9 +8,42 @@ import tseslint from "typescript-eslint";
  * Paise type stops most mistakes at the type level; these rules stop the ones
  * that slip through as plain numbers.
  */
+/**
+ * GUARDRAIL — syntax Node's type stripping cannot run.
+ *
+ * There is no build step: Node executes the TypeScript directly by erasing
+ * types. Anything needing code generation therefore fails at startup — but
+ * Vitest uses esbuild, which happily compiles it, so the tests stay green while
+ * the deployed process refuses to boot. That gap cost a debugging session; these
+ * rules and the smoke-boot gate close it from both sides.
+ */
+const stripOnlyRules = [
+  {
+    selector: "TSParameterProperty",
+    message:
+      "Constructor parameter properties need code generation and crash Node's type stripping. " +
+      "Declare the field and assign it in the constructor body instead.",
+  },
+  {
+    selector: "TSEnumDeclaration",
+    message:
+      "enum needs code generation and crashes Node's type stripping. Use a const array with " +
+      "`as const` plus a derived union type — see ROLES in @sr/envelope/core.",
+  },
+  {
+    selector: "TSModuleDeclaration[kind='namespace']",
+    message: "namespace needs code generation and crashes Node's type stripping. Use modules.",
+  },
+  {
+    selector: "Decorator",
+    message: "Decorators need code generation and crash Node's type stripping.",
+  },
+];
+
 const moneyRules = {
   "no-restricted-syntax": [
     "error",
+    ...stripOnlyRules,
     {
       selector: "CallExpression[callee.name='parseFloat']",
       message: "parseFloat is banned: money is integer paise. Use rupeesToPaise() from @sr/envelope/core.",
@@ -49,8 +82,13 @@ export default tseslint.config(
     },
   },
   {
-    // Tests may reach for the sharp tools they are testing.
+    // Tests may reach for the sharp tools they are testing — but NOT for syntax
+    // the production runtime cannot execute. Test helpers get imported by app
+    // code often enough that letting this slide would defeat the purpose.
     files: ["**/test/**/*.ts", "**/*.test.ts"],
-    rules: { "no-restricted-syntax": "off", "@typescript-eslint/no-explicit-any": "off" },
+    rules: {
+      "no-restricted-syntax": ["error", ...stripOnlyRules],
+      "@typescript-eslint/no-explicit-any": "off",
+    },
   },
 );

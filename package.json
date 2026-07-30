@@ -15,7 +15,8 @@
     "depcruise": "depcruise apps packages --config .dependency-cruiser.cjs",
     "db:migrate": "node --experimental-strip-types tools/migrate.ts",
     "db:reset": "node --experimental-strip-types tools/migrate.ts --reset",
-    "gates": "pnpm typecheck && pnpm lint && pnpm depcruise && pnpm test"
+    "gates": "pnpm typecheck && pnpm lint && pnpm depcruise && pnpm test && pnpm smoke",
+    "smoke": "node --experimental-strip-types tools/smoke-boot.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",

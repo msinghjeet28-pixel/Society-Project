@@ -82,3 +82,10 @@ jobs:
       # The guardrail itself must work on a real database.
       - name: chain verification job
         run: node --experimental-strip-types tools/verify-chains.ts
+
+      # Gate 12 — the deployables actually start under the runtime Render uses.
+      # Vitest runs on esbuild, which compiles TypeScript syntax that Node's
+      # type stripping refuses, so a green suite is not evidence of a booting
+      # process. This gate is that evidence.
+      - name: smoke boot
+        run: pnpm smoke

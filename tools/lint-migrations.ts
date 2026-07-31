@@ -23,8 +23,13 @@ const LEDGER_TABLES = ["membership_event", "expense", "payment", "complaint_even
 
 interface Rule {
   name: string;
-  test: RegExp;
+  /** A regex to match, or a predicate over the comment-stripped SQL. */
+  test: RegExp | ((sql: string) => boolean);
   message: string;
+}
+
+function violates(rule: Rule, sql: string): boolean {
+  return typeof rule.test === "function" ? rule.test(sql) : rule.test.test(sql);
 }
 
 const RULES: Rule[] = [
@@ -55,6 +60,26 @@ const RULES: Rule[] = [
       "i",
     ),
     message: "Granting UPDATE/DELETE on a ledger table undoes Arch §04 layer 2.",
+  },
+  {
+    // Found the hard way. `CHECK (corrects_id IS NULL OR length(trim(reason)) > 0)`
+    // passes when reason is NULL, because the expression evaluates to NULL and a
+    // CHECK rejects only FALSE — so the constraint is toothless in exactly the
+    // case it exists for. Every ledger table added from here (expense, payment,
+    // complaint_event) will copy this constraint, so the rule catches the copy.
+    name: "correction-reason-check-must-handle-null",
+    // Fires on a DECLARATION of the column, not a mention of it: matching the
+    // bare word flagged 0001, which names corrects_id inside the immutability
+    // trigger's hint string. Matching only the offending CHECK went the other
+    // way and flagged the neighbouring `corrects_id <> id` constraint. Declaring
+    // the column is the moment the guard has to exist.
+    test: (sql: string) =>
+      /\bcorrects_id\s+uuid\b/i.test(sql) &&
+      !/correct_reason\s+IS\s+NOT\s+NULL/i.test(sql),
+    message:
+      "a correction-reason CHECK must test `correct_reason IS NOT NULL` explicitly. Without it a " +
+      "NULL reason makes the expression NULL, and a CHECK only rejects FALSE — the constraint " +
+      "passes precisely when the reason is missing.",
   },
   {
     name: "no-public-ro-base-tables",
@@ -89,7 +114,7 @@ for (const file of files) {
   const sql = stripComments(raw);
 
   for (const rule of RULES) {
-    if (!rule.test.test(sql)) continue;
+    if (!violates(rule, sql)) continue;
     if (allowed.has(rule.name)) {
       console.log(`allowed · ${file} · ${rule.name} (documented exception)`);
       continue;

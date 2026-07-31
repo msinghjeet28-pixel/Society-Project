@@ -100,10 +100,18 @@ const SUPPORT_TABLES = [
   "society",
 ] as const;
 
+/**
+ * Session machinery. Easy to forget, because nothing about a society's record
+ * lives here — but OTP rate limits are counted from otp_challenge, so leaving
+ * it behind means the fourth sign-in in a file fails with "too many codes
+ * requested for this number" and the test looks like a product bug.
+ */
+const SESSION_TABLES = ["otp_challenge", "refresh_token"] as const;
+
 /** Wipe everything except applied-migration bookkeeping. Owner only. */
 export async function resetWorld(client: pg.Client): Promise<void> {
   await client.query(
-    `TRUNCATE ${[...LEDGER_TABLES, ...SUPPORT_TABLES].join(", ")} CASCADE`,
+    `TRUNCATE ${[...LEDGER_TABLES, ...SUPPORT_TABLES, ...SESSION_TABLES].join(", ")} CASCADE`,
   );
 }
 
